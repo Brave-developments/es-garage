@@ -18,12 +18,20 @@ const app = new Vue({
    },
    methods: {
 
+    nuiPost(name, payload = {}) {
+      return fetch(`https://${GetParentResourceName()}/${name}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify(payload)
+      }).then(response => response.json()).catch(() => ({}));
+    },
+
     parked(){
-      $.post(`https://${GetParentResourceName()}/Parked`, JSON.stringify(this.select.plate));
+      this.nuiPost('Parked', this.select.plate);
     },
 
     spawn(){
-      $.post(`https://${GetParentResourceName()}/SpawnVehicle`, JSON.stringify(this.select));
+      this.nuiPost('SpawnVehicle', this.select);
     },
 
     info(item){
@@ -33,14 +41,16 @@ const app = new Vue({
         id : item.id,
         located: item.location,
         state : item.state,
-        vehicle : item.model,
-        mods : item.mods
+        vehicle : item.vehicle,
+        model : item.model,
+        mods : item.mods,
+        damage : item.damage
       }
-      $.post(`https://${GetParentResourceName()}/VehicleInfo`, JSON.stringify({data:item}), function(data){
+      this.nuiPost('VehicleInfo', {data:item}).then(function(data){
         app.features = [
-          { label: 'Speed', value: Math.floor(data.speed) },
-          { label: 'Fuel', value: Math.floor(data.fuel) },
-          { label: 'Durability', value: Math.floor(data.traction) },
+          { label: 'Speed', value: Math.floor(data.Speed || 0) },
+          { label: 'Fuel', value: Math.floor(data.Fuel || 0) },
+          { label: 'Durability', value: Math.floor(data.Traction || 0) },
         ];
       });
     },
@@ -57,7 +67,7 @@ const app = new Vue({
             } else if (this.car.state === 0) {
               stateZeroCount = 1;
             }
-            this.impound = stateZeroCount;
+            this.impound = item.impound || stateZeroCount;
             // console.log(` DÜŞ ARTIK A ${stateZeroCount}`);
             if (typeof this.car.mods === 'string') {
               try {
@@ -69,7 +79,7 @@ const app = new Vue({
             break;
             case 'CLOSE':
               this.ui = false;
-              $.post(`https://${GetParentResourceName()}/exit`, JSON.stringify({}));
+              this.nuiPost('exit');
             break
         }
     },   
@@ -88,24 +98,27 @@ const app = new Vue({
   document.onkeyup = function (data) {
     if (data.which == 27) {
       app.ui = false;
-      $.post(`https://${GetParentResourceName()}/exit`, JSON.stringify({}));
+      app.nuiPost('exit');
     }
   };
-  let holding = false;
+  let holding = false, lastRotate = 0;
   let direction = "", oldx = 0;
   document.addEventListener('mousedown', (e) => holding = true);
   document.addEventListener('mouseup', (e) => holding = false);
   document.addEventListener('mousemove', function(e) {
       if (e.pageX < oldx) { direction = "left" } else if (e.pageX > oldx) { direction = "right" }
       oldx = e.pageX;
+      if (Date.now() - lastRotate < 50) return;
       if (direction == "left" && holding) {
           if (e.target.classList.contains("move")) {
-              $.post(`https://${GetParentResourceName()}/rotateright`);
+              lastRotate = Date.now();
+              app.nuiPost('rotateright');
           }
       }
       if (direction == "right" && holding) {
           if (e.target.classList.contains("move")) {
-              $.post(`https://${GetParentResourceName()}/rotateleft`);
+              lastRotate = Date.now();
+              app.nuiPost('rotateleft');
           }
       }
   });
@@ -113,9 +126,9 @@ const app = new Vue({
   document.addEventListener('wheel', function(e) {
       if (e.target.classList.contains("move")) {
           if (e.deltaY < 0) {
-              $.post(`https://${GetParentResourceName()}/zoomIn`);
+              app.nuiPost('zoomIn');
           } else {
-              $.post(`https://${GetParentResourceName()}/zoomOut`);
+              app.nuiPost('zoomOut');
           }
       }
   });

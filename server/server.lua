@@ -1,210 +1,264 @@
-Framework = nil
+local Framework = nil
 
-if Customize.Framework == 'ESX' then
-    Citizen.CreateThread(function()
-        while Framework == nil do
-            TriggerEvent('esx:getSharedObject', function(obj) Framework = obj end)
-            Citizen.Wait(4)
-        end
-        
-        RegisterNetEvent('Record', function(plate,table)
-            if GetResourceState('mysql-async') == 'started' then
-                MySQL.Async.execute('UPDATE owned_vehicles SET damage = ? WHERE plate = ?', {json.encode(table), plate})
-            elseif GetResourceState('ghmattimysql') == 'started' then
-                exports.ghmattimysql:execute('UPDATE owned_vehicles SET damage = ? WHERE plate = ?', {json.encode(table), plate})
-            elseif GetResourceState('oxmysql') == 'started' then
-                exports.oxmysql:execute('UPDATE owned_vehicles SET damage = ? WHERE plate = ?', {json.encode(table), plate})
-            end
-        end)
-        
-          RegisterNetEvent('State', function(state, plate)
-            if GetResourceState('mysql-async') == 'started' then
-                MySQL.Async.execute('UPDATE owned_vehicles SET state = ? WHERE plate = ?', {state, plate})
-            elseif GetResourceState('ghmattimysql') == 'started' then
-                exports.ghmattimysql:execute('UPDATE owned_vehicles SET state = ? WHERE plate = ?', {state, plate})
-            elseif GetResourceState('oxmysql') == 'started' then
-                exports.oxmysql:execute('UPDATE owned_vehicles SET state = ? WHERE plate = ?', {state, plate})
-            end
-        end)
-        
-        Framework.RegisterServerCallback("isPrice", function(source, cb, money)
-            local Player = Framework.GetPlayerFromId(source)
-            if Player.getMoney() >= 500 then 
-                Player.removeMoney(500)
-                cb(true)
-            else
-                cb(false)
-            end
-        end)
+local function GetDatabase()
+    if GetResourceState('oxmysql') == 'started' then
+        return 'oxmysql'
+    end
 
-        Framework.RegisterServerCallback("IsVehOwned", function(source, cb, plate, extra)
-            local Player = Framework.GetPlayerFromId(source)
-            if GetResourceState('mysql-async') == 'started' then
-            MySQL.Async.fetchAll('SELECT * FROM owned_vehicles WHERE plate = @plate', {
-                ["@plate"] = plate
-            }, function(result)
-                    if result[1] then 
-                        cb(true) 
-                    else 
-                    cb(false) end
-                end)
-            elseif GetResourceState('ghmattimysql') == 'started' then
-                exports.ghmattimysql:execute('SELECT * FROM owned_vehicles WHERE plate = @plate', {
-                    ["@plate"] = plate
-                }, function(result)
-                      if result[1] then 
-                          cb(true) 
-                      else 
-                      cb(false) end
-                    end)
-             elseif GetResourceState('oxmysql') == 'started' then
-                 exports.oxmysql:execute('SELECT * FROM owned_vehicles WHERE plate = @plate', {
-                     ["@plate"] = plate
-                 }, function(result)
-                      if result[1] then 
-                          cb(true) 
-                      else 
-                      cb(false) end
-                 end)
-             end
-         end)
-        
-        Framework.RegisterServerCallback("getVehicles", function(source, cb)
-            local xPlayer = Framework.GetPlayerFromId(source)
-            if GetResourceState('oxmysql') == 'started' then
-                exports.oxmysql:execute('SELECT * FROM owned_vehicles WHERE owner=@owner', {
-                    ['@owner'] = xPlayer.identifier,
-                }, function(result)
-                    cb(result)
-                end)
-            elseif GetResourceState('ghmattimysql') == 'started' then
-                exports.ghmattimysql:execute('SELECT * FROM owned_vehicles WHERE owner=@owner', {
-                    ['@owner'] = xPlayer.identifier,
-                }, function(result)
-                    cb(result)
-                end)
-            elseif GetResourceState('mysql-async') == 'started' then
-                MySQL.Async.fetchAll('SELECT * FROM owned_vehicles WHERE owner=@owner', {
-                    ['@owner'] = xPlayer.identifier,
-                }, function(result)
-                    cb(result)
-                end)
-            end
-        end)
-        
-    end)
+    if GetResourceState('ghmattimysql') == 'started' then
+        return 'ghmattimysql'
+    end
 
-elseif Customize.Framework == 'QBCore' or Customize.Framework == 'OLDQBCore'  then
-    if Customize.Framework == "OLDQBCore" then
-        while Framework == nil do
-            TriggerEvent('QBCore:GetObject', function(obj) Framework = obj end)
-            Citizen.Wait(4)
-        end
-    else  Framework = exports['qb-core']:GetCoreObject() end
+    if MySQL and MySQL.Async then
+        return 'mysql-async'
+    end
 
-    Framework.Functions.CreateCallback("isPrice", function(source, cb)
-        local Player = Framework.Functions.GetPlayer(source)
-		if Player.Functions.RemoveMoney(Customize.PriceType, Customize.GaragesPrice) then
-			cb(true)
-		else
-			cb(false)
-		end
-    end)
-
-    
-    RegisterNetEvent('Record', function(plate,table)
-        MySQL.Async.execute('UPDATE player_vehicles  SET damage = ? WHERE plate = ?', {json.encode(table), plate})
-    end)
-    
-      RegisterNetEvent('State', function(state, plate)
-        if GetResourceState('mysql-async') == 'started' then
-            MySQL.Async.execute('UPDATE player_vehicles  SET state = ? WHERE plate = ?', {state, plate})
-        elseif GetResourceState('ghmattimysql') == 'started' then
-            exports.ghmattimysql:execute('UPDATE player_vehicles  SET state = ? WHERE plate = ?', {state, plate})
-        elseif GetResourceState('oxmysql') == 'started' then
-            exports.oxmysql:execute('UPDATE player_vehicles  SET state = ? WHERE plate = ?', {state, plate})
-        end
-    end)
-
-
-    Framework.Functions.CreateCallback("IsVehOwned", function(source, cb, plate, extra)
-        local Player = Framework.Functions.GetPlayer(source)
-        if GetResourceState('mysql-async') == 'started' then
-        MySQL.Async.fetchAll('SELECT * FROM player_vehicles WHERE plate = @plate', {
-            ["@plate"] = plate
-        }, function(result)
-                if result[1] then 
-                    cb(true) 
-                else 
-                cb(false) end
-            end)
-        elseif GetResourceState('ghmattimysql') == 'started' then
-            exports.ghmattimysql:execute('SELECT * FROM player_vehicles WHERE plate = @plate', {
-                ["@plate"] = plate
-            }, function(result)
-                  if result[1] then 
-                      cb(true) 
-                  else 
-                  cb(false) end
-            end)
-        elseif GetResourceState('oxmysql') == 'started' then
-            exports.oxmysql:execute('SELECT * FROM player_vehicles WHERE plate = @plate', {
-                ["@plate"] = plate
-            }, function(result)
-                 if result[1] then 
-                     cb(true) 
-                 else 
-                 cb(false) end
-            end)
-        end
-    end)
-
-    
-    Framework.Functions.CreateCallback("getVehicles", function(source, cb)
-        local xPlayer = Framework.Functions.GetPlayer(source)
-        if GetResourceState('oxmysql') == 'started' then
-            exports.oxmysql:execute('SELECT * FROM player_vehicles WHERE citizenid = @citizenid', {
-                ['@citizenid'] = xPlayer.PlayerData.citizenid,
-            }, function(result)
-                cb(result)
-            end)
-        elseif GetResourceState('ghmattimysql') == 'started' then
-            exports.ghmattimysql:execute('SELECT * FROM player_vehicles WHERE citizenid = @citizenid', {
-                ['@citizenid'] = xPlayer.PlayerData.citizenid,
-            }, function(result)
-                cb(result)
-            end)
-    
-        elseif GetResourceState('mysql-async') == 'started' then
-            MySQL.Async.fetchAll('SELECT * FROM player_vehicles WHERE citizenid = @citizenid', {
-                ['@citizenid'] = xPlayer.PlayerData.citizenid,
-            }, function(result)
-                cb(result)
-            end)
-        end
-    end)
-
+    return nil
 end
 
+local function DbFetch(query, params, cb)
+    local database = GetDatabase()
+
+    if database == 'oxmysql' then
+        exports.oxmysql:execute(query, params, cb)
+    elseif database == 'ghmattimysql' then
+        exports.ghmattimysql:execute(query, params, cb)
+    elseif database == 'mysql-async' then
+        MySQL.Async.fetchAll(query, params, cb)
+    else
+        print('[es-garage] No supported database resource started.')
+        cb({})
+    end
+end
+
+local function DbExecute(query, params, cb)
+    local database = GetDatabase()
+
+    if database == 'oxmysql' then
+        exports.oxmysql:execute(query, params, cb)
+    elseif database == 'ghmattimysql' then
+        exports.ghmattimysql:execute(query, params, cb)
+    elseif database == 'mysql-async' then
+        MySQL.Async.execute(query, params, cb)
+    else
+        print('[es-garage] No supported database resource started.')
+        if cb then cb(0) end
+    end
+end
+
+local function GetFrameworkObject()
+    if Framework then
+        return Framework
+    end
+
+    if Customize.Framework == 'ESX' then
+        TriggerEvent('esx:getSharedObject', function(obj) Framework = obj end)
+    elseif Customize.Framework == 'NewESX' then
+        Framework = exports['es_extended']:getSharedObject()
+    elseif Customize.Framework == 'OLDQBCore' then
+        TriggerEvent('QBCore:GetObject', function(obj) Framework = obj end)
+    else
+        Framework = exports['qb-core']:GetCoreObject()
+    end
+
+    return Framework
+end
+
+local function GetPlayer(source)
+    local framework = GetFrameworkObject()
+    if not framework then return nil end
+
+    if Customize.Framework == 'ESX' or Customize.Framework == 'NewESX' then
+        return framework.GetPlayerFromId(source)
+    end
+
+    return framework.Functions.GetPlayer(source)
+end
+
+local function GetPlayerIdentifier(Player)
+    if not Player then return nil end
+
+    if Customize.Framework == 'ESX' or Customize.Framework == 'NewESX' then
+        return Player.identifier
+    end
+
+    return Player.PlayerData and Player.PlayerData.citizenid or nil
+end
+
+local function GetVehicleTable()
+    if Customize.Framework == 'ESX' or Customize.Framework == 'NewESX' then
+        return 'owned_vehicles', 'owner'
+    end
+
+    return 'player_vehicles', 'citizenid'
+end
+
+local function IsValidPlate(plate)
+    return type(plate) == 'string' and plate ~= '' and #plate <= 12
+end
+
+local function DoesPlayerOwnPlate(source, plate, cb)
+    if not IsValidPlate(plate) then
+        cb(false)
+        return
+    end
+
+    local Player = GetPlayer(source)
+    local identifier = GetPlayerIdentifier(Player)
+
+    if not identifier then
+        cb(false)
+        return
+    end
+
+    local tableName, ownerColumn = GetVehicleTable()
+
+    DbFetch(('SELECT plate FROM %s WHERE plate = ? AND %s = ? LIMIT 1'):format(tableName, ownerColumn), {
+        plate,
+        identifier
+    }, function(result)
+        cb(result and result[1] ~= nil)
+    end)
+end
+
+local function UpdateOwnedVehicle(source, plate, column, value)
+    DoesPlayerOwnPlate(source, plate, function(owned)
+        if not owned then return end
+
+        local tableName, ownerColumn = GetVehicleTable()
+        local Player = GetPlayer(source)
+        local identifier = GetPlayerIdentifier(Player)
+
+        DbExecute(('UPDATE %s SET %s = ? WHERE plate = ? AND %s = ?'):format(tableName, column, ownerColumn), {
+            value,
+            plate,
+            identifier
+        })
+    end)
+end
+
+local function RegisterCallbacks()
+    local framework = GetFrameworkObject()
+    if not framework and not lib then return end
+
+    if lib and lib.callback then
+        lib.callback.register('es-garage:server:IsVehOwned', function(source, plate)
+            local result = promise.new()
+            DoesPlayerOwnPlate(source, plate, function(owned)
+                result:resolve(owned)
+            end)
+            return Citizen.Await(result)
+        end)
+
+        lib.callback.register('es-garage:server:GetVehicles', function(source)
+            local Player = GetPlayer(source)
+            local identifier = GetPlayerIdentifier(Player)
+            local result = promise.new()
+
+            if not identifier then
+                return {}
+            end
+
+            local tableName, ownerColumn = GetVehicleTable()
+            DbFetch(('SELECT * FROM %s WHERE %s = ?'):format(tableName, ownerColumn), { identifier }, function(vehicles)
+                result:resolve(vehicles or {})
+            end)
+
+            return Citizen.Await(result)
+        end)
+    end
+
+    if not framework then return end
+
+    if Customize.Framework == 'ESX' or Customize.Framework == 'NewESX' then
+        framework.RegisterServerCallback('es-garage:server:IsPrice', function(source, cb)
+            local Player = GetPlayer(source)
+            if not Player then
+                cb(false)
+                return
+            end
+
+            if Player.getMoney() >= Customize.GaragesPrice then
+                Player.removeMoney(Customize.GaragesPrice)
+                cb(true)
+                return
+            end
+
+            cb(false)
+        end)
+
+        framework.RegisterServerCallback('es-garage:server:IsVehOwned', function(source, cb, plate)
+            DoesPlayerOwnPlate(source, plate, cb)
+        end)
+
+        framework.RegisterServerCallback('es-garage:server:GetVehicles', function(source, cb)
+            local Player = GetPlayer(source)
+            local identifier = GetPlayerIdentifier(Player)
+
+            if not identifier then
+                cb({})
+                return
+            end
+
+            DbFetch('SELECT * FROM owned_vehicles WHERE owner = ?', { identifier }, cb)
+        end)
+    elseif framework.Functions then
+        framework.Functions.CreateCallback('es-garage:server:IsPrice', function(source, cb)
+            local Player = GetPlayer(source)
+            if not Player or not Player.Functions then
+                cb(false)
+                return
+            end
+
+            cb(Player.Functions.RemoveMoney(Customize.PriceType, Customize.GaragesPrice, 'garage-fee') == true)
+        end)
+
+        framework.Functions.CreateCallback('es-garage:server:IsVehOwned', function(source, cb, plate)
+            DoesPlayerOwnPlate(source, plate, cb)
+        end)
+
+        framework.Functions.CreateCallback('es-garage:server:GetVehicles', function(source, cb)
+            local Player = GetPlayer(source)
+            local identifier = GetPlayerIdentifier(Player)
+
+            if not identifier then
+                cb({})
+                return
+            end
+
+            DbFetch('SELECT * FROM player_vehicles WHERE citizenid = ?', { identifier }, cb)
+        end)
+    end
+end
+
+CreateThread(function()
+    while not GetFrameworkObject() do
+        Wait(200)
+    end
+
+    RegisterCallbacks()
+end)
+
+RegisterNetEvent('es-garage:server:Record', function(plate, damage)
+    local src = source
+
+    if type(damage) ~= 'table' then return end
+    UpdateOwnedVehicle(src, plate, 'damage', json.encode(damage))
+end)
+
+RegisterNetEvent('es-garage:server:SetState', function(state, plate)
+    local src = source
+    state = tonumber(state)
+
+    if state ~= 0 and state ~= 1 then return end
+    UpdateOwnedVehicle(src, plate, 'state', state)
+end)
 
 AddEventHandler('onResourceStart', function(resourceName)
-    if (GetCurrentResourceName() ~= resourceName) then return end
-    Wait(100)
-    if Customize.Framework == 'ESX' then
-        if GetResourceState('mysql-async') == 'started' then
-            MySQL.Async.execute('UPDATE owned_vehicles SET state = 1 WHERE state = 0', {})
-        elseif GetResourceState('ghmattimysql') == 'started' then
-            exports.ghmattimysql:execute('UPDATE owned_vehicles SET state = 1 WHERE state = 0', {})
-        elseif GetResourceState('oxmysql') == 'started' then
-            exports.oxmysql:execute('UPDATE owned_vehicles SET state = 1 WHERE state = 0', {})
-        end
-    else
-        if GetResourceState('mysql-async') == 'started' then
-            MySQL.Async.execute('UPDATE player_vehicles SET state = 1 WHERE state = 0', {})
-        elseif GetResourceState('ghmattimysql') == 'started' then
-            exports.ghmattimysql:execute('UPDATE player_vehicles SET state = 1 WHERE state = 0', {})
-        elseif GetResourceState('oxmysql') == 'started' then
-            exports.oxmysql:execute('UPDATE player_vehicles SET state = 1 WHERE state = 0', {})
-        end
-    end
-  end)
+    if GetCurrentResourceName() ~= resourceName then return end
+
+    Wait(1000)
+
+    local tableName = GetVehicleTable()
+    DbExecute(('UPDATE %s SET state = 1 WHERE state = 0'):format(tableName), {})
+end)

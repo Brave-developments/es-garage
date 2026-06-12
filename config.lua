@@ -8,7 +8,7 @@ Customize.GetVehFuel = function(Veh)
 end
 
 Customize.SetVehFuel = function(Veh, Fuel)
-    return GetVehicleFuelLevel(Veh) -- exports['LegacyFuel']:SetFuel(Veh, data.Table.fuel)
+    return SetVehicleFuelLevel(Veh, Fuel + 0.0) -- exports['LegacyFuel']:SetFuel(Veh, Fuel)
 end
 
 Customize.Carkeys = function(Plate)
@@ -85,7 +85,7 @@ function GetFramework()
     if Customize.Framework == "ESX" then
         while Get == nil do
             TriggerEvent('esx:getSharedObject', function(Set) Get = Set end)
-            Citizen.Wait(0)
+            Wait(0)
         end
     end
     if Customize.Framework == "NewESX" then
@@ -97,7 +97,7 @@ function GetFramework()
     if Customize.Framework == "OLDQBCore" then
         while Get == nil do
             TriggerEvent('QBCore:GetObject', function(Set) Get = Set end)
-            Citizen.Wait(200)
+            Wait(200)
         end
     end
     return Get

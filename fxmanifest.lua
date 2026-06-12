@@ -1,27 +1,29 @@
-fx_version "adamant"
+fx_version 'cerulean'
 
-description "EyesStore"
-author "Raider#0101"
+description 'EyesStore'
+author 'Raider#0101'
 version '1.0.0'
 repository 'https://discord.com/invite/EkwWvFS'
 
-game "gta5"
+game 'gta5'
+
+lua54 'yes'
 
 client_script { 
-"client/*.lua"
+    'client/*.lua'
 }
 
 server_script {
-"@mysql-async/lib/MySQL.lua",
-"server/*.lua"
+    'server/*.lua'
 }
 
 shared_script {
-"config.lua"
+    '@ox_lib/init.lua',
+    'config.lua'
 }
 
 
-ui_page "index.html"
+ui_page 'index.html'
 
 files {
     'index.html',
@@ -29,6 +31,4 @@ files {
     'assets/**/*.*',
     'assets/font/*.otf', 
 }
-
-lua54 'yes'
 -- dependency '/assetpacks'

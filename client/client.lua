@@ -1,17 +1,17 @@
 Framework = nil
+local SetVehProperties = nil
+local GetVehProperties = nil
 
-Citizen.CreateThread(function()
+CreateThread(function()
     while Framework == nil do 
         Framework = GetFramework()
-        Citizen.Wait(500) 
+        Wait(500) 
     end
-    Citizen.Wait(2500)
+    Wait(2500)
     if Customize.Framework == "ESX" or Customize.Framework == "NewESX" then
-        Callback = Framework.TriggerServerCallback
         SetVehProperties = Framework.Game.SetVehicleProperties
         GetVehProperties = Framework.Game.GetVehicleProperties
-    else
-        Callback = Framework.Functions.TriggerCallback
+    elseif Framework.Functions then
         SetVehProperties = Framework.Functions.SetVehicleProperties
         GetVehProperties = Framework.Functions.GetVehicleProperties
     end
@@ -21,9 +21,45 @@ LastCamera, currentVeh, PlayerJob, vehCam = nil, nil, nil, nil
 newData = {}
 local inGarage = 0
 
-Citizen.CreateThread(function()
+local function TriggerGarageCallback(name, cb, ...)
+    if Customize.Framework == "ESX" or Customize.Framework == "NewESX" then
+        if Framework and Framework.TriggerServerCallback then
+            Framework.TriggerServerCallback(name, cb, ...)
+            return
+        end
+    elseif Framework and Framework.Functions and Framework.Functions.TriggerCallback then
+        Framework.Functions.TriggerCallback(name, cb, ...)
+        return
+    end
+
+    if lib and lib.callback then
+        lib.callback(name, false, cb, ...)
+        return
+    end
+
+    print(('[es-garage] Callback %s failed: framework callback bridge is not ready.'):format(name))
+    cb(nil)
+end
+
+local function SetGarageVehicleProperties(vehicle, props)
+    if SetVehProperties then
+        SetVehProperties(vehicle, props)
+        return
+    end
+
+    if Framework and Framework.Functions and Framework.Functions.SetVehicleProperties then
+        Framework.Functions.SetVehicleProperties(vehicle, props)
+        return
+    end
+
+    if Framework and Framework.Game and Framework.Game.SetVehicleProperties then
+        Framework.Game.SetVehicleProperties(vehicle, props)
+    end
+end
+
+CreateThread(function()
     while true do 
-        Citizen.Wait(0)
+        local sleep = 1000
         local getPed = PlayerPedId()
         local entity = GetEntityCoords(getPed)
         local InVeh = GetVehiclePedIsIn(getPed)
@@ -33,13 +69,19 @@ Citizen.CreateThread(function()
             local park = #(entity - text.VehPutPos)
             
             if dist <= 5.0 then
+                sleep = 0
                 HandleGarageProximity(dist, text, getPed)
             end
             
             if IsPedInAnyVehicle(getPed, false) then
                 HandleVehicleProximity(park, text, InVeh, getPed)
+                if park <= 12.0 then
+                    sleep = 0
+                end
             end
         end
+
+        Wait(sleep)
     end
 end)
 
@@ -47,7 +89,7 @@ function HandleGarageProximity(dist, text, getPed)
     if dist <= 2.0 then
         Draw3DText(text.Npc.Pos.x, text.Npc.Pos.y, text.Npc.Pos.z + 0.98, "[E] GARAGE")
         if IsControlJustPressed(0, 38) then
-            Framework.Functions.TriggerCallback('getVehicles', function(vehicles)
+            TriggerGarageCallback('es-garage:server:GetVehicles', function(vehicles)
                 ProcessVehicles(vehicles, text)
             end)
         end
@@ -60,7 +102,8 @@ function ProcessVehicles(vehicles, text)
         local impound = {}
         for k, v in pairs(vehicles) do
             local class = GetVehicleClassFromName(v.vehicle)
-            v.mods = json.decode(v.mods)
+            v.mods = type(v.mods) == 'string' and json.decode(v.mods) or v.mods or {}
+            v.damage = type(v.damage) == 'string' and json.decode(v.damage) or v.damage or {}
             v.model = GetDisplayNameFromVehicleModel(v.vehicle)
             v.title = GetLabelText(v.model)
             v.location = text.UIName
@@ -77,6 +120,7 @@ function ProcessVehicles(vehicles, text)
             SendNUIMessage({
                 data = "GARAGE",
                 car = data,
+                impound = #impound,
                 name = UI
             })
             SetNuiFocus(true, true)
@@ -130,7 +174,8 @@ end
 
 function HandleVehicleCheck(InVeh, getPed)
     local plate = GetPlate(InVeh)
-    Framework.Functions.TriggerCallback('IsVehOwned', function(owned)
+
+    TriggerGarageCallback('es-garage:server:IsVehOwned', function(owned)
         if owned then
             RecordVehicleState(InVeh, plate)
             Wait(200)
@@ -139,12 +184,13 @@ function HandleVehicleCheck(InVeh, getPed)
     end, plate, '')
 end
 
-RegisterNUICallback('Parked', function(plate)
-    TriggerServerEvent('State', 0, plate)
+RegisterNUICallback('Parked', function(plate, cb)
+    TriggerServerEvent('es-garage:server:SetState', 1, plate)
+    if cb then cb({ ok = true }) end
 end)
 
 function RecordVehicleState(InVeh, plate)
-    TriggerServerEvent('Record', plate, {
+    TriggerServerEvent('es-garage:server:Record', plate, {
         Door = GetVehicleDoorStatus(InVeh),
         HalfWheel = GetVehicleTyreStatus(InVeh, false),
         FullWheel = GetVehicleTyreStatus(InVeh, true),
@@ -155,7 +201,7 @@ function RecordVehicleState(InVeh, plate)
         DoorLock = GetVehicleDoorLockStatus(InVeh),
         EngineOn = GetIsVehicleEngineRunning(InVeh)
     })
-    TriggerServerEvent('State', 1, plate)
+    TriggerServerEvent('es-garage:server:SetState', 1, plate)
 end
 
 function GetVehicleDoorStatus(InVeh)
@@ -184,30 +230,34 @@ local cameraZoomLevel = 1.0
 local minZoomLevel = 0.5
 local maxZoomLevel = 3.0
 
-RegisterNUICallback("rotateright", function()
+RegisterNUICallback("rotateright", function(_, cb)
     if currentVeh then
         SetEntityHeading(currentVeh, GetEntityHeading(currentVeh) - 2)
     end
+    if cb then cb({ ok = true }) end
 end)
 
-RegisterNUICallback("rotateleft", function()
+RegisterNUICallback("rotateleft", function(_, cb)
     if currentVeh then
         SetEntityHeading(currentVeh, GetEntityHeading(currentVeh) + 2)
     end
+    if cb then cb({ ok = true }) end
 end)
 
-RegisterNUICallback("zoomIn", function()
-    if cameraZoomLevel > minZoomLevel then
+RegisterNUICallback("zoomIn", function(_, cb)
+    if vehCam and cameraZoomLevel > minZoomLevel then
         cameraZoomLevel = cameraZoomLevel - 0.1
         SetCamFov(vehCam, 50 / cameraZoomLevel)
     end
+    if cb then cb({ ok = true }) end
 end)
 
-RegisterNUICallback("zoomOut", function()
-    if cameraZoomLevel < maxZoomLevel then
+RegisterNUICallback("zoomOut", function(_, cb)
+    if vehCam and cameraZoomLevel < maxZoomLevel then
         cameraZoomLevel = cameraZoomLevel + 0.1
         SetCamFov(vehCam, 50 / cameraZoomLevel)
     end
+    if cb then cb({ ok = true }) end
 end)
 
 RegisterNUICallback('VehicleInfo', function(data, cb)
@@ -224,7 +274,7 @@ RegisterNUICallback('VehicleInfo', function(data, cb)
     currentVeh = CreateVehicle(model, LastCamera.vehSpawn.x, LastCamera.vehSpawn.y, LastCamera.vehSpawn.z, LastCamera.vehSpawn.w, false, true)
     SetVehicleEngineOn(currentVeh, true, true, false)
     print("Vehicle Mods: " .. json.encode(vehicleData))
-    SetVehicleProperties(currentVeh, vehicleData)
+    SetGarageVehicleProperties(currentVeh, vehicleData)
     Camera()
     PointCamAtEntity(vehCam, currentVeh)
     RenderScriptCams(true, false, 0, true, true)
@@ -240,7 +290,7 @@ RegisterNUICallback('VehicleInfo', function(data, cb)
     })
 end)
 
-RegisterNUICallback('SpawnVehicle', function(data)
+RegisterNUICallback('SpawnVehicle', function(data, cb)
     print(json.encode(data))
     local vehicleData = (Customize.Framework == "ESX" or Customize.Framework == "NewESX") and json.decode(data.vehicle) or data.vehicle
     local model = (Customize.Framework == "ESX" or Customize.Framework == "NewESX") and vehicleData.model or GetHashKey(data.vehicle)
@@ -252,48 +302,92 @@ RegisterNUICallback('SpawnVehicle', function(data)
         Mods = {}
         print("Mods data was nil, setting it to an empty table.")
     end
-    EYESSpawnVehicle(model, function(Veh)
-        SetNetworkIdAlwaysExistsForPlayer(NetworkGetNetworkIdFromEntity(Veh), PlayerPedId(), true)
-        SetVehicleNumberPlateText(Veh, data.plate)
-        SetEntityHeading(Veh, LastSpawnPos.w)
-        Customize.SetVehFuel(Veh, data.fuel)
-        SetEntityAsMissionEntity(Veh, true, true)
-        TaskWarpPedIntoVehicle(PlayerPedId(), Veh, -1)
-        SetVehicleEngineOn(Veh, true, false)
-        SetVehicleUndriveable(Veh, false)
-        SendNUIMessage({data = "CLOSE"})
-        TriggerServerEvent('State', 0, data.plate)
-        Customize.Carkeys(GetVehicleNumberPlateText(Veh))
-        print("Setting Vehicle Properties for Vehicle: " .. json.encode(Mods))
-        if Customize.Framework == "ESX" or Customize.Framework == "NewESX" then
-            Framework.Game.SetVehicleProperties(Veh, Mods)
-        else
-            Framework.Functions.SetVehicleProperties(Veh, Mods)
+    TriggerGarageCallback('es-garage:server:IsVehOwned', function(owned)
+        if not owned then
+            if cb then cb({ ok = false }) end
+            return
         end
-        DoScreenFadeIn(1000)
-    end, LastSpawnPos, true)
+
+        EYESSpawnVehicle(model, function(Veh)
+            SetNetworkIdAlwaysExistsForPlayer(NetworkGetNetworkIdFromEntity(Veh), PlayerPedId(), true)
+            SetVehicleNumberPlateText(Veh, data.plate)
+            SetEntityHeading(Veh, LastSpawnPos.w)
+            Customize.SetVehFuel(Veh, data.fuel or 100.0)
+            SetEntityAsMissionEntity(Veh, true, true)
+            TaskWarpPedIntoVehicle(PlayerPedId(), Veh, -1)
+            SetVehicleEngineOn(Veh, true, false)
+            SetVehicleUndriveable(Veh, false)
+            SendNUIMessage({data = "CLOSE"})
+            TriggerServerEvent('es-garage:server:SetState', 0, data.plate)
+            Customize.Carkeys(GetVehicleNumberPlateText(Veh))
+            print("Setting Vehicle Properties for Vehicle: " .. json.encode(Mods))
+            SetGarageVehicleProperties(Veh, Mods)
+            ApplyVehicleDamage(Veh, data.damage)
+            DoScreenFadeIn(1000)
+            if cb then cb({ ok = true }) end
+        end, LastSpawnPos, true)
+    end, data.plate, '')
 end)
 
 function SetVehicleProperties(vehicle, props)
-    if Framework.Functions and Framework.Functions.SetVehicleProperties then
+    if Framework and Framework.Functions and Framework.Functions.SetVehicleProperties then
         Framework.Functions.SetVehicleProperties(vehicle, props)
+    elseif Framework and Framework.Game and Framework.Game.SetVehicleProperties then
+        Framework.Game.SetVehicleProperties(vehicle, props)
     else
         print("Error: SetVehicleProperties function not found in Framework.")
     end
 end
 
 function GetVehicleProperties(vehicle)
-    if Framework.Functions and Framework.Functions.GetVehicleProperties then
+    if Framework and Framework.Functions and Framework.Functions.GetVehicleProperties then
         return Framework.Functions.GetVehicleProperties(vehicle)
+    elseif Framework and Framework.Game and Framework.Game.GetVehicleProperties then
+        return Framework.Game.GetVehicleProperties(vehicle)
     else
         print("Error: GetVehicleProperties function not found in Framework.")
         return {}
     end
 end
 
+function ApplyVehicleDamage(vehicle, damage)
+    if type(damage) ~= 'table' then return end
+
+    if damage.Door then
+        for door, broken in pairs(damage.Door) do
+            if broken then
+                SetVehicleDoorBroken(vehicle, tonumber(door), true)
+            end
+        end
+    end
+
+    if damage.FullWheel then
+        for tyre, burst in pairs(damage.FullWheel) do
+            if burst then
+                SetVehicleTyreBurst(vehicle, tonumber(tyre), true, 1000.0)
+            end
+        end
+    end
+
+    if damage.HalfWheel then
+        for tyre, burst in pairs(damage.HalfWheel) do
+            if burst then
+                SetVehicleTyreBurst(vehicle, tonumber(tyre), false, 1000.0)
+            end
+        end
+    end
+
+    if damage.Dirt then SetVehicleDirtLevel(vehicle, damage.Dirt + 0.0) end
+    if damage.BodyHealth then SetVehicleBodyHealth(vehicle, damage.BodyHealth + 0.0) end
+    if damage.PetrolTank then SetVehiclePetrolTankHealth(vehicle, damage.PetrolTank + 0.0) end
+    if damage.EngineHealth then SetVehicleEngineHealth(vehicle, damage.EngineHealth + 0.0) end
+    if damage.DoorLock then SetVehicleDoorsLocked(vehicle, damage.DoorLock) end
+    if damage.EngineOn ~= nil then SetVehicleEngineOn(vehicle, damage.EngineOn == true, true, false) end
+end
+
 local display = false
 
-RegisterNUICallback("exit", function(data)
+RegisterNUICallback("exit", function(data, cb)
     if currentVeh ~= nil then EYESDeleteVehicle(currentVeh) end
     LastCamera = nil
     currentVeh = nil
@@ -302,6 +396,7 @@ RegisterNUICallback("exit", function(data)
     SetFocusEntity(GetPlayerPed(PlayerId()))
     SetDisplay(false, false)
     DisplayRadar(true)
+    if cb then cb({ ok = true }) end
 end)
 
 function SetDisplay(bool)
@@ -309,7 +404,7 @@ function SetDisplay(bool)
     SetNuiFocus(bool, bool)
 end
 
-Citizen.CreateThread(function()
+CreateThread(function()
     for index, eyes in pairs(Customize.Garages) do
         NPCLoad(eyes)
         MapBlip(eyes)
@@ -331,7 +426,7 @@ end
 function NPCLoad(eyes)
     RequestModel(eyes.Npc.Hash)
     while not HasModelLoaded(eyes.Npc.Hash) do Wait(1) end
-    local NpcPed = CreatePed(4, eyes.Npc.Hash, eyes.Npc.Pos.x, eyes.Npc.Pos.y, eyes.Npc.Pos.z - 1, 3374176, false, true)
+    local NpcPed = CreatePed(4, eyes.Npc.Hash, eyes.Npc.Pos.x, eyes.Npc.Pos.y, eyes.Npc.Pos.z - 1, eyes.Npc.Heading, false, true)
     SetEntityHeading(NpcPed, eyes.Npc.Heading)
     FreezeEntityPosition(NpcPed, true)
     SetEntityInvincible(NpcPed, true)
@@ -382,10 +477,11 @@ function EYESSpawnVehicle(model, cb, coords, isnetworked, teleportInto)
     local ped = PlayerPedId()
     model = type(model) == 'string' and GetHashKey(model) or model
     if not IsModelInCdimage(model) then return end
+    local heading = coords and coords.w or GetEntityHeading(ped)
     coords = coords and vec3(coords.x, coords.y, coords.z) or GetEntityCoords(ped)
     isnetworked = isnetworked or true
     ELoadModel(model)
-    local veh = CreateVehicle(model, coords.x, coords.y, coords.z, coords.w, isnetworked, false)
+    local veh = CreateVehicle(model, coords.x, coords.y, coords.z, heading, isnetworked, false)
     local netid = NetworkGetNetworkIdFromEntity(veh)
     SetVehicleHasBeenOwnedByPlayer(veh, true)
     SetNetworkIdCanMigrate(netid, true)
